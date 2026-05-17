@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EMC/ENV/MECH Test Simülatörü</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#f8fafc;--card:#fff;--border:#e2e8f0;--text:#1e293b;
+  --muted:#64748b;--blue:#2563eb;--green:#16a34a;--red:#dc2626;
+  --teal:#0d9488;--purple:#7c3aed;--orange:#ea580c;
+}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:14px;min-height:100vh}
+.header{background:linear-gradient(135deg,#1e3a5f,#2563eb);color:#fff;padding:20px 24px;position:sticky;top:0;z-index:100;box-shadow:0 2px 8px rgba(0,0,0,.15);display:flex;align-items:center;justify-content:space-between}
+.header h1{font-size:18px;font-weight:700}
+.header p{font-size:12px;opacity:.75;margin-top:3px}
+.api-status{display:flex;align-items:center;gap:6px;font-size:12px;opacity:.9}
+.dot{width:8px;height:8px;border-radius:50%;background:#4ade80}
+.dot.offline{background:#f87171}
+.dot.loading{background:#fbbf24;animation:pulse 1s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.layout{display:grid;grid-template-columns:300px 1fr;min-height:calc(100vh - 64px)}
+.sidebar{background:#1e293b;color:#e2e8f0;padding:20px;overflow-y:auto;max-height:calc(100vh - 64px);position:sticky;top:64px}
+.sb-section{margin-bottom:22px}
+.sb-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:#94a3b8;margin-bottom:12px}
+.slider-group{margin-bottom:13px}
+.slider-header{display:flex;justify-content:space-between;margin-bottom:5px}
+.slider-label{font-size:12px;color:#cbd5e1}
+.slider-val{font-size:12px;font-weight:700;color:#60a5fa}
+input[type=range]{width:100%;height:4px;border-radius:2px;accent-color:#3b82f6;cursor:pointer}
+.slider-minmax{display:flex;justify-content:space-between;font-size:10px;color:#475569;margin-top:2px}
+.divider{height:1px;background:#334155;margin:14px 0}
+.run-btn{width:100%;padding:12px;background:#2563eb;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:14px;font-weight:700;transition:.2s;margin-top:4px;display:flex;align-items:center;justify-content:center;gap:8px}
+.run-btn:hover{background:#1d4ed8}
+.run-btn:disabled{background:#475569;cursor:not-allowed}
+.reset-btn{width:100%;padding:9px;background:rgba(59,130,246,.12);color:#60a5fa;border:1px solid rgba(59,130,246,.25);border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;margin-top:8px;transition:.2s}
+.reset-btn:hover{background:rgba(59,130,246,.22)}
+.rep-row{display:flex;justify-content:space-between;align-items:center;margin-top:14px;padding-top:14px;border-top:1px solid #334155}
+.rep-label{font-size:12px;color:#94a3b8}
+.rep-btns{display:flex;gap:4px}
+.rep-btn{padding:4px 10px;border-radius:6px;border:1px solid #475569;background:transparent;color:#94a3b8;cursor:pointer;font-size:11px;font-weight:600;transition:.15s}
+.rep-btn.active{background:#2563eb;color:#fff;border-color:#2563eb}
+.rep-btn:hover:not(.active){background:#334155;color:#e2e8f0}
+.main{padding:20px;overflow-y:auto}
+.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px}
+.metric{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:13px 15px;position:relative;overflow:hidden}
+.metric-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px}
+.metric-value{font-size:21px;font-weight:700;color:var(--text)}
+.metric-value.green{color:var(--green)}
+.metric-value.red{color:var(--red)}
+.metric-sub{font-size:11px;color:var(--muted);margin-top:3px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px 18px;margin-bottom:14px}
+.card-title{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:12px}
+.s-row{display:grid;grid-template-columns:1.4fr 1fr 1fr 1fr;align-items:center;padding:9px 12px;border-radius:8px;margin-bottom:3px}
+.s-row:hover{background:#f1f5f9}
+.s-row.active{background:#eff6ff;border:1px solid #bfdbfe}
+.s-row.best-row{background:#f0fdf4;border:1px solid #bbf7d0}
+.s-row.hdr{background:#f8fafc;border:1px solid var(--border);font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+.s-name{font-size:13px;font-weight:600;display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+.badge{display:inline-flex;align-items:center;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700}
+.b-green{background:#dcfce7;color:#15803d}
+.b-blue{background:#dbeafe;color:#1d4ed8}
+.b-gray{background:#f1f5f9;color:#64748b}
+.b-red{background:#fee2e2;color:#b91c1c}
+.b-teal{background:#ccfbf1;color:#0f766e}
+.b-best{background:#d1fae5;color:#065f46;border:1px solid #6ee7b7}
+.chart-wrap{position:relative;width:100%;height:240px}
+.bn-row{display:flex;align-items:center;gap:10px;margin-bottom:7px}
+.bn-label{font-size:12px;color:var(--text);min-width:130px;font-weight:500}
+.bn-track{flex:1;height:8px;background:#f1f5f9;border-radius:4px;overflow:hidden}
+.bn-fill{height:100%;border-radius:4px;transition:width .5s ease}
+.bn-val{font-size:12px;font-weight:700;min-width:36px;text-align:right}
+.ga-box{background:linear-gradient(135deg,#f0fdf4,#ecfdf5);border:1px solid #6ee7b7;border-radius:12px;padding:16px;margin-bottom:14px}
+.ga-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.ga-title{font-size:13px;font-weight:700;color:#065f46}
+.ga-badge{background:#d1fae5;color:#065f46;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700}
+.ga-params{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.ga-param{background:rgba(255,255,255,.7);border:1px solid #a7f3d0;border-radius:6px;padding:6px 10px;font-size:12px;color:#047857}
+.ga-param span{display:block;font-size:10px;color:#6ee7b7;margin-bottom:1px}
+.spinner{display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.skeleton{background:linear-gradient(90deg,#f1f5f9 25%,#e2e8f0 50%,#f1f5f9 75%);background-size:200% 100%;animation:shimmer 1.5s infinite;border-radius:6px;height:24px;width:80px}
+@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+.notice{background:#fef3c7;border:1px solid #fde68a;border-radius:8px;padding:10px 14px;font-size:12px;color:#92400e;margin-bottom:14px;display:none}
+.notice.show{display:block}
+.footer{text-align:center;padding:14px;font-size:11px;color:var(--muted);border-top:1px solid var(--border);margin-top:6px}
+@media(max-width:768px){
+  .layout{grid-template-columns:1fr}
+  .sidebar{max-height:none;position:relative;top:0}
+  .metrics{grid-template-columns:repeat(2,1fr)}
+  .s-row{grid-template-columns:1.2fr .8fr .8fr}
+  .ga-params{grid-template-columns:repeat(2,1fr)}
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <h1>🔬 EMC / ENV / MECH Test Sistemi — SimPy Simülatörü</h1>
+    <p>Gerçek SimPy simülasyonu · Arena mantığı · Parametreleri ayarlayın → Çalıştır</p>
+  </div>
+  <div class="api-status">
+    <div class="dot" id="api-dot"></div>
+    <span id="api-label">Bağlanıyor...</span>
+  </div>
+</div>
+
+<div class="layout">
+  <div class="sidebar">
+
+    <div class="sb-section">
+      <div class="sb-title">⚙️ Kapasite</div>
+      <div class="slider-group">
+        <div class="slider-header"><span class="slider-label">KAR_MECH_01</span><span class="slider-val" id="v-mech-cap">1</span></div>
+        <input type="range" id="s-mech-cap" min="1" max="5" step="1" value="1">
+        <div class="slider-minmax"><span>1</span><span>5</span></div>
+      </div>
+      <div class="slider-group">
+        <div class="slider-header"><span class="slider-label">ENG_REWORK_01</span><span class="slider-val" id="v-eng-cap">1</span></div>
+        <input type="range" id="s-eng-cap" min="1" max="5" step="1" value="1">
+        <div class="slider-minmax"><span>1</span><span>5</span></div>
+      </div>
+      <div class="slider-group">
+        <div class="slider-header"><span class="slider-label">KAR_EMC_01</span><span class="slider-val" id="v-emc-cap">1</span></div>
+        <input type="range" id="s-emc-cap" min="1" max="4" step="1" value="1">
+        <div class="slider-minmax"><span>1</span><span>4</span></div>
+      </div>
+      <div class="slider-group">
+        <div class="slider-header"><span class="slider-label">KAR_ENV_01</span><span class="slider-val" id="v-env-cap">1</span></div>
+        <input type="range" id="s-env-cap" min="1" max="4" step="1" value="1">
+        <div class="slider-minmax"><span>1</span><span>4</span></div>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="sb-section">
+      <div class="sb-title">🎲 Hata Oranları</div>
+      <div class="slider-group">
+        <div class="slider-header"><span class="slider-label">EMC fail %</span><span class="slider-val" id="v-emc-fail">22%</span></div>
+        <input type="range" id="s-emc-fail" min="5" max="40" step="1" value="22">
+        <div class="slider-minmax"><span>%5</span><span>%40</span></div>
+      </div>
+      <div class="slider-group">
+        <div class="slider-header"><span class="slider-label">MECH fail %</span><span class="slider-val" id="v-mech-fail">25%</span></div>
+        <input type="range" id="s-mech-fail" min="5" max="35" step="1" value="25">
+        <div class="slider-minmax"><span>%5</span><span>%35</span></div>
+      </div>
+      <div class="slider-group">
+        <div class="slider-header"><span class="slider-label">ENV fail %</span><span class="slider-val" id="v-env-fail">18%</span></div>
+        <input type="range" id="s-env-fail" min="5" max="35" step="1" value="18">
+        <div class="slider-minmax"><span>%5</span><span>%35</span></div>
+      </div>
+      <div class="slider-group">
+        <div class="slider-header"><span class="slider-label">Final fail %</span><span class="slider-val" id="v-final-fail">14%</span></div>
+        <input type="range" id="s-final-fail" min="5" max="30" step="1" value="14">
+        <div class="slider-minmax"><span>%5</span><span>%30</span></div>
+      </div>
+    </div>
+
+    <div class="rep-row">
+      <span class="rep-label">Replikasyon</span>
+      <div class="rep-btns">
+        <button class="rep-btn" onclick="setRep(10)">10</button>
+        <button class="rep-btn active" onclick="setRep(30)">30</button>
+        <button class="rep-btn" onclick="setRep(100)">100</button>
+      </div>
+    </div>
+
+    <button class="run-btn" id="run-btn" onclick="runSimulation()">
+      ▶ Simülasyonu Çalıştır
+    </button>
+    <button class="reset-btn" onclick="resetAll()">↺ Baz senaryoya sıfırla</button>
+  </div>
+
+  <div class="main">
+
+    <div class="notice" id="api-notice">
+      ⚠️ API sunucusuna bağlanılamıyor. Lütfen Render.com'da servisin çalıştığını kontrol edin.
+    </div>
+
+    <div class="metrics">
+      <div class="metric">
+        <div class="metric-label">Baz senaryo (S1)</div>
+        <div class="metric-value">18.21</div>
+        <div class="metric-sub">gün · Arena referansı</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Mevcut ayar (SimPy)</div>
+        <div class="metric-value green" id="m-cur">— gün</div>
+        <div class="metric-sub" id="m-cur-sub">Çalıştır butonuna basın</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Baza göre iyileşme</div>
+        <div class="metric-value green" id="m-imp">—</div>
+        <div class="metric-sub" id="m-imp-sub"></div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">S5 Kombine'ye fark</div>
+        <div class="metric-value" id="m-vs5">—</div>
+        <div class="metric-sub">15.30 gün referans</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">📊 Senaryo Karşılaştırması (SimPy sonuçları)</div>
+      <div class="s-row hdr">
+        <div>Senaryo</div><div>Total Time</div><div>İyileşme</div><div>Durum</div>
+      </div>
+      <div id="scenario-list"><div style="padding:20px;text-align:center;color:var(--muted);font-size:13px">Çalıştır butonuna basınca SimPy sonuçları görünür</div></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">📈 Grafik</div>
+      <div class="chart-wrap"><canvas id="bar-chart" role="img" aria-label="Senaryo Total Time karşılaştırma grafiği">Senaryo karşılaştırma bar grafiği</canvas></div>
+    </div>
+
+    <div class="ga-box">
+      <div class="ga-header">
+        <div class="ga-title">🧬 GA Optimumu — Python Genetik Algoritma Referans Çözümü</div>
+        <div class="ga-badge">%53.8 iyileşme</div>
+      </div>
+      <div class="ga-params">
+        <div class="ga-param"><span>KAR_MECH_01</span>1 kaynak</div>
+        <div class="ga-param"><span>ENG_REWORK_01</span>2 kaynak</div>
+        <div class="ga-param"><span>KAR_EMC_01</span>2 kaynak</div>
+        <div class="ga-param"><span>KAR_ENV_01</span>3 kaynak</div>
+        <div class="ga-param"><span>EMC fail</span>%5</div>
+        <div class="ga-param"><span>MECH fail</span>%13</div>
+      </div>
+      <div style="margin-top:10px;font-size:13px;color:#065f46;font-weight:600">
+        Total Time: 8.40 gün (baz: 18.21 gün) — 500 replikasyon, 25 nesil × 30 birey
+      </div>
+    </div>
+
+    <div class="footer">
+      Arena Simülasyonu ile Üretim Test Sürecinin Modellenmesi ve What-If Senaryo Analizi &nbsp;·&nbsp; Bitirme Projesi 2025 &nbsp;·&nbsp;
+      Backend: FastAPI + SimPy · Deploy: Render.com
+    </div>
+  </div>
+</div>
+
+<script>
+// ── DEĞER — bunu Render.com'dan aldıktan sonra güncelleyin ──
+const API_URL = "https://sim-dashboard-8wfv.onrender.com";
+// ──────────────────────────────────────────────────────────
+
+let nReps = 30;
+let barChart = null;
+let scenarioCache = null;
+const BASE = 18.21;
+const S5_REF = 15.30;
+const SCEN_COLORS = ['#64748b','#2563eb','#ea580c','#dc2626','#0d9488'];
+
+function setRep(n) {
+  nReps = n;
+  document.querySelectorAll('.rep-btn').forEach(b => {
+    b.classList.toggle('active', parseInt(b.textContent) === n);
+  });
+}
+
+function getParams() {
+  return {
+    mech_cap:   +document.getElementById('s-mech-cap').value,
+    eng_cap:    +document.getElementById('s-eng-cap').value,
+    emc_cap:    +document.getElementById('s-emc-cap').value,
+    env_cap:    +document.getElementById('s-env-cap').value,
+    emc_fail:   +document.getElementById('s-emc-fail').value / 100,
+    mech_fail:  +document.getElementById('s-mech-fail').value / 100,
+    env_fail:   +document.getElementById('s-env-fail').value / 100,
+    final_fail: +document.getElementById('s-final-fail').value / 100,
+    n_reps:     nReps,
+  };
+}
+
+function updateSliderLabels() {
+  document.getElementById('v-mech-cap').textContent   = document.getElementById('s-mech-cap').value;
+  document.getElementById('v-eng-cap').textContent    = document.getElementById('s-eng-cap').value;
+  document.getElementById('v-emc-cap').textContent    = document.getElementById('s-emc-cap').value;
+  document.getElementById('v-env-cap').textContent    = document.getElementById('s-env-cap').value;
+  document.getElementById('v-emc-fail').textContent   = document.getElementById('s-emc-fail').value + '%';
+  document.getElementById('v-mech-fail').textContent  = document.getElementById('s-mech-fail').value + '%';
+  document.getElementById('v-env-fail').textContent   = document.getElementById('s-env-fail').value + '%';
+  document.getElementById('v-final-fail').textContent = document.getElementById('s-final-fail').value + '%';
+}
+
+async function checkAPI() {
+  const dot = document.getElementById('api-dot');
+  const lbl = document.getElementById('api-label');
+  dot.className = 'dot loading';
+  lbl.textContent = 'Bağlanıyor...';
+  try {
+    const res = await fetch(API_URL + '/', {signal: AbortSignal.timeout(5000)});
+    if (res.ok) {
+      dot.className = 'dot'; lbl.textContent = 'API bağlı ✓';
+      document.getElementById('api-notice').classList.remove('show');
+      loadScenarios();
+    } else throw new Error();
+  } catch {
+    dot.className = 'dot offline'; lbl.textContent = 'API bağlı değil';
+    document.getElementById('api-notice').classList.add('show');
+  }
+}
+
+async function loadScenarios() {
+  try {
+    const res = await fetch(API_URL + '/scenarios');
+    scenarioCache = await res.json();
+    renderTable(scenarioCache, null);
+    renderChart(scenarioCache, null);
+  } catch(e) { console.error('Scenarios failed', e); }
+}
+
+async function runSimulation() {
+  const btn = document.getElementById('run-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Simüle ediliyor...';
+
+  const params = getParams();
+  try {
+    const res = await fetch(API_URL + '/simulate', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(params)
+    });
+    const data = await res.json();
+    const t   = data.total_time;
+    const imp = data.improvement_pct;
+    const vsS5 = +(t - S5_REF).toFixed(2);
+
+    document.getElementById('m-cur').textContent     = t.toFixed(2) + ' gün';
+    document.getElementById('m-cur-sub').textContent = nReps + ' replikasyon';
+    document.getElementById('m-imp').textContent     = '%' + imp;
+    document.getElementById('m-imp').className       = 'metric-value ' + (imp > 0 ? 'green' : 'red');
+    document.getElementById('m-imp-sub').textContent = imp > 0 ? 'kazanım ✓' : 'kötüleşme ✗';
+    const vs5Sign = vsS5 > 0 ? '+' : '';
+    document.getElementById('m-vs5').textContent     = vs5Sign + vsS5 + ' gün';
+    document.getElementById('m-vs5').className       = 'metric-value ' + (vsS5 <= 0 ? 'green' : 'red');
+
+    if (scenarioCache) {
+      renderTable(scenarioCache, {t, imp});
+      renderChart(scenarioCache, t);
+    }
+  } catch(e) {
+    alert('API hatası: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '▶ Simülasyonu Çalıştır';
+  }
+}
+
+function renderTable(scenarios, current) {
+  const best = Math.min(...scenarios.map(s => s.total_time), current ? current.t : Infinity);
+  const list = document.getElementById('scenario-list');
+  list.innerHTML = '';
+  const scColors = SCEN_COLORS;
+  scenarios.forEach((s, i) => {
+    const isBest = Math.abs(s.total_time - best) < 0.01;
+    const imp    = s.improvement_pct;
+    const badgeC = imp > 12 ? 'b-teal' : imp > 6 ? 'b-green' : imp > 0 ? 'b-gray' : 'b-red';
+    const row = document.createElement('div');
+    row.className = 's-row' + (isBest ? ' best-row' : '');
+    row.innerHTML = `
+      <div class="s-name">
+        <span style="width:9px;height:9px;border-radius:50%;background:${scColors[i]};display:inline-block;flex-shrink:0"></span>
+        ${s.name} ${isBest ? '<span class="badge b-best">★ en iyi</span>' : ''}
+      </div>
+      <div style="font-size:13px;font-weight:700;color:${scColors[i]}">${s.total_time.toFixed(2)} gün</div>
+      <div><span class="badge ${badgeC}">%${imp}${imp > 0 ? ' ↑' : ''}</span></div>
+      <div style="font-size:11px;color:var(--muted)">SimPy · ${nReps} rep</div>`;
+    list.appendChild(row);
+  });
+
+  if (current) {
+    const curBest = Math.abs(current.t - best) < 0.01;
+    const curBadge = current.imp > 12 ? 'b-teal' : current.imp > 6 ? 'b-green' : current.imp > 0 ? 'b-gray' : 'b-red';
+    const curRow = document.createElement('div');
+    curRow.className = 's-row active' + (curBest ? ' best-row' : '');
+    curRow.innerHTML = `
+      <div class="s-name">
+        <span style="width:9px;height:9px;border-radius:50%;background:#7c3aed;display:inline-block;flex-shrink:0"></span>
+        Şu an ayar <span class="badge b-blue">siz</span>
+        ${curBest ? '<span class="badge b-best">★ en iyi</span>' : ''}
+      </div>
+      <div style="font-size:13px;font-weight:800;color:#7c3aed">${current.t.toFixed(2)} gün</div>
+      <div><span class="badge ${curBadge}">%${current.imp}${current.imp > 0 ? ' ↑' : ''}</span></div>
+      <div style="font-size:11px;color:var(--muted)">SimPy · ${nReps} rep</div>`;
+    list.appendChild(curRow);
+  }
+}
+
+function renderChart(scenarios, curTime) {
+  const labels = [...scenarios.map(s => s.name), ...(curTime ? ['Şu an'] : [])];
+  const values = [...scenarios.map(s => s.total_time), ...(curTime ? [curTime] : [])];
+  const colors = [...SCEN_COLORS, '#7c3aed'];
+
+  if (barChart) barChart.destroy();
+  barChart = new Chart(document.getElementById('bar-chart'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        data: values,
+        backgroundColor: colors.slice(0, values.length),
+        borderRadius: 6,
+        borderSkipped: false,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => {
+          const v = ctx.parsed.y;
+          const imp = ((BASE - v) / BASE * 100).toFixed(1);
+          return ` ${v.toFixed(2)} gün  (%${imp} iyileşme)`;
+        }}}
+      },
+      scales: {
+        x: { grid:{display:false}, ticks:{color:'#64748b',font:{size:11}} },
+        y: {
+          min: 0, max: Math.max(...values) * 1.2,
+          grid:{color:'rgba(0,0,0,0.05)'},
+          ticks:{callback: v => v.toFixed(0)+' gün', color:'#64748b', font:{size:11}}
+        }
+      }
+    }
+  });
+}
+
+function resetAll() {
+  ['s-mech-cap','s-eng-cap','s-emc-cap','s-env-cap'].forEach((id,i) => {
+    document.getElementById(id).value = 1;
+  });
+  document.getElementById('s-emc-fail').value = 22;
+  document.getElementById('s-mech-fail').value = 25;
+  document.getElementById('s-env-fail').value = 18;
+  document.getElementById('s-final-fail').value = 14;
+  updateSliderLabels();
+}
+
+['s-mech-cap','s-eng-cap','s-emc-cap','s-env-cap','s-emc-fail','s-mech-fail','s-env-fail','s-final-fail']
+  .forEach(id => document.getElementById(id).addEventListener('input', updateSliderLabels));
+
+checkAPI();
+</script>
+</body>
+</html>
