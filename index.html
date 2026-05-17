@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EMC/ENV/MECH Test Simülatörü</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --bg:#f8fafc;--card:#fff;--border:#e2e8f0;--text:#1e293b;
+    --muted:#64748b;--blue:#2563eb;--green:#16a34a;--red:#dc2626;
+    --teal:#0d9488;--purple:#7c3aed;--orange:#ea580c;
+  }
+  body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:14px;min-height:100vh}
+
+  /* HEADER */
+  .header{background:linear-gradient(135deg,#1e3a5f,#2563eb);color:#fff;padding:20px 24px;position:sticky;top:0;z-index:100;box-shadow:0 2px 8px rgba(0,0,0,.15)}
+  .header h1{font-size:18px;font-weight:700;letter-spacing:-.3px}
+  .header p{font-size:12px;opacity:.75;margin-top:3px}
+
+  /* LAYOUT */
+  .layout{display:grid;grid-template-columns:320px 1fr;gap:0;min-height:calc(100vh - 64px)}
+
+  /* SIDEBAR */
+  .sidebar{background:#1e293b;color:#e2e8f0;padding:20px;overflow-y:auto;max-height:calc(100vh - 64px);position:sticky;top:64px}
+  .sb-section{margin-bottom:24px}
+  .sb-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:#94a3b8;margin-bottom:12px}
+  .slider-group{margin-bottom:14px}
+  .slider-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+  .slider-label{font-size:13px;color:#cbd5e1}
+  .slider-val{font-size:13px;font-weight:700;color:#60a5fa;min-width:36px;text-align:right}
+  input[type=range]{width:100%;height:4px;border-radius:2px;accent-color:#3b82f6;cursor:pointer}
+  .slider-minmax{display:flex;justify-content:space-between;font-size:10px;color:#475569;margin-top:2px}
+  .reset-btn{width:100%;padding:10px;background:rgba(59,130,246,.15);color:#60a5fa;border:1px solid rgba(59,130,246,.3);border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;transition:.2s;margin-top:8px}
+  .reset-btn:hover{background:rgba(59,130,246,.25)}
+  .divider{height:1px;background:#334155;margin:16px 0}
+
+  /* MAIN */
+  .main{padding:20px;overflow-y:auto;max-height:calc(100vh - 64px)}
+
+  /* METRIC CARDS */
+  .metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px}
+  .metric{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px}
+  .metric-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
+  .metric-value{font-size:22px;font-weight:700;color:var(--text)}
+  .metric-value.green{color:var(--green)}
+  .metric-value.red{color:var(--red)}
+  .metric-sub{font-size:11px;color:var(--muted);margin-top:3px}
+
+  /* SECTION CARD */
+  .card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px;margin-bottom:16px}
+  .card-title{font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:14px;display:flex;align-items:center;gap:6px}
+
+  /* SCENARIO TABLE */
+  .s-table{width:100%}
+  .s-row{display:grid;grid-template-columns:1.4fr 1fr 1fr 1fr;align-items:center;padding:10px 12px;border-radius:8px;margin-bottom:4px;transition:.15s}
+  .s-row:hover{background:#f1f5f9}
+  .s-row.active{background:#eff6ff;border:1px solid #bfdbfe}
+  .s-row.best-row{background:#f0fdf4;border:1px solid #bbf7d0}
+  .s-row.header-row{background:#f8fafc;border:1px solid var(--border);font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+  .s-name{font-size:13px;font-weight:600;display:flex;align-items:center;gap:6px}
+  .s-time{font-size:14px;font-weight:700}
+  .s-imp{font-size:12px;font-weight:700}
+  .badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700;letter-spacing:.3px}
+  .b-green{background:#dcfce7;color:#15803d}
+  .b-blue{background:#dbeafe;color:#1d4ed8}
+  .b-gray{background:#f1f5f9;color:#64748b}
+  .b-red{background:#fee2e2;color:#b91c1c}
+  .b-teal{background:#ccfbf1;color:#0f766e}
+  .b-best{background:#d1fae5;color:#065f46;border:1px solid #6ee7b7}
+
+  /* BAR CHART */
+  .chart-wrap{position:relative;width:100%;height:260px}
+
+  /* BOTTLENECK BARS */
+  .bn-row{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+  .bn-label{font-size:12px;color:var(--text);min-width:140px;font-weight:500}
+  .bn-track{flex:1;height:8px;background:#f1f5f9;border-radius:4px;overflow:hidden}
+  .bn-fill{height:100%;border-radius:4px;transition:width .4s ease}
+  .bn-val{font-size:12px;font-weight:700;min-width:40px;text-align:right;color:var(--text)}
+
+  /* GA BOX */
+  .ga-box{background:linear-gradient(135deg,#f0fdf4,#ecfdf5);border:1px solid #6ee7b7;border-radius:12px;padding:16px}
+  .ga-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+  .ga-title{font-size:13px;font-weight:700;color:#065f46}
+  .ga-badge{background:#d1fae5;color:#065f46;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700}
+  .ga-params{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+  .ga-param{background:rgba(255,255,255,.7);border:1px solid #a7f3d0;border-radius:6px;padding:6px 10px;font-size:12px;color:#047857}
+  .ga-param span{display:block;font-size:10px;color:#6ee7b7;margin-bottom:1px}
+
+  /* FOOTER */
+  .footer{text-align:center;padding:16px;font-size:11px;color:var(--muted);border-top:1px solid var(--border);margin-top:8px}
+
+  @media(max-width:768px){
+    .layout{grid-template-columns:1fr}
+    .sidebar{max-height:none;position:relative;top:0}
+    .main{max-height:none}
+    .metrics{grid-template-columns:repeat(2,1fr)}
+    .s-row{grid-template-columns:1.2fr .8fr .8fr}
+    .ga-params{grid-template-columns:repeat(2,1fr)}
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>🔬 EMC / ENV / MECH Test Sistemi — İnteraktif Simülatör</h1>
+  <p>Parametreleri değiştirin → Anlık senaryo karşılaştırması ve iyileşme tahminleri</p>
+</div>
+
+<div class="layout">
+
+  <!-- ══ SIDEBAR ══ -->
+  <div class="sidebar">
+
+    <div class="sb-section">
+      <div class="sb-title">⚙️ Kapasite Ayarları</div>
+
+      <div class="slider-group">
+        <div class="slider-header">
+          <span class="slider-label">KAR_MECH_01</span>
+          <span class="slider-val" id="v-mech-cap">1</span>
+        </div>
+        <input type="range" id="s-mech-cap" min="1" max="5" step="1" value="1">
+        <div class="slider-minmax"><span>1</span><span>5 kaynak</span></div>
+      </div>
+
+      <div class="slider-group">
+        <div class="slider-header">
+          <span class="slider-label">ENG_REWORK_01</span>
+          <span class="slider-val" id="v-eng-cap">1</span>
+        </div>
+        <input type="range" id="s-eng-cap" min="1" max="5" step="1" value="1">
+        <div class="slider-minmax"><span>1</span><span>5 kaynak</span></div>
+      </div>
+
+      <div class="slider-group">
+        <div class="slider-header">
+          <span class="slider-label">KAR_EMC_01</span>
+          <span class="slider-val" id="v-emc-cap">1</span>
+        </div>
+        <input type="range" id="s-emc-cap" min="1" max="4" step="1" value="1">
+        <div class="slider-minmax"><span>1</span><span>4 kaynak</span></div>
+      </div>
+
+      <div class="slider-group">
+        <div class="slider-header">
+          <span class="slider-label">KAR_ENV_01</span>
+          <span class="slider-val" id="v-env-cap">1</span>
+        </div>
+        <input type="range" id="s-env-cap" min="1" max="4" step="1" value="1">
+        <div class="slider-minmax"><span>1</span><span>4 kaynak</span></div>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="sb-section">
+      <div class="sb-title">🎲 Hata Oranları</div>
+
+      <div class="slider-group">
+        <div class="slider-header">
+          <span class="slider-label">EMC fail %</span>
+          <span class="slider-val" id="v-emc-fail">22%</span>
+        </div>
+        <input type="range" id="s-emc-fail" min="5" max="40" step="1" value="22">
+        <div class="slider-minmax"><span>%5</span><span>%40</span></div>
+      </div>
+
+      <div class="slider-group">
+        <div class="slider-header">
+          <span class="slider-label">MECH fail %</span>
+          <span class="slider-val" id="v-mech-fail">25%</span>
+        </div>
+        <input type="range" id="s-mech-fail" min="5" max="35" step="1" value="25">
+        <div class="slider-minmax"><span>%5</span><span>%35</span></div>
+      </div>
+
+      <div class="slider-group">
+        <div class="slider-header">
+          <span class="slider-label">ENV fail %</span>
+          <span class="slider-val" id="v-env-fail">18%</span>
+        </div>
+        <input type="range" id="s-env-fail" min="5" max="35" step="1" value="18">
+        <div class="slider-minmax"><span>%5</span><span>%35</span></div>
+      </div>
+
+      <div class="slider-group">
+        <div class="slider-header">
+          <span class="slider-label">Final fail %</span>
+          <span class="slider-val" id="v-final-fail">14%</span>
+        </div>
+        <input type="range" id="s-final-fail" min="5" max="30" step="1" value="14">
+        <div class="slider-minmax"><span>%5</span><span>%30</span></div>
+      </div>
+    </div>
+
+    <button class="reset-btn" onclick="resetAll()">↺ Baz senaryoya sıfırla</button>
+  </div>
+
+  <!-- ══ MAIN ══ -->
+  <div class="main">
+
+    <!-- METRIC CARDS -->
+    <div class="metrics">
+      <div class="metric">
+        <div class="metric-label">Baz senaryo (S1)</div>
+        <div class="metric-value">18.21</div>
+        <div class="metric-sub">gün · referans</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Mevcut ayar tahmini</div>
+        <div class="metric-value green" id="m-cur">—</div>
+        <div class="metric-sub">gün</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Baza göre iyileşme</div>
+        <div class="metric-value green" id="m-imp">—</div>
+        <div class="metric-sub" id="m-imp-sub">kazanım</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">S5 Kombine'ye fark</div>
+        <div class="metric-value" id="m-vs5">—</div>
+        <div class="metric-sub" id="m-vs5-sub">15.30 gün referans</div>
+      </div>
+    </div>
+
+    <!-- SCENARIO TABLE -->
+    <div class="card">
+      <div class="card-title">📊 Senaryo Karşılaştırması</div>
+      <div class="s-row header-row">
+        <div>Senaryo</div>
+        <div>Total Time</div>
+        <div>İyileşme</div>
+        <div>Durum</div>
+      </div>
+      <div id="scenario-list"></div>
+    </div>
+
+    <!-- BAR CHART -->
+    <div class="card">
+      <div class="card-title">📈 Grafik Karşılaştırması</div>
+      <div class="chart-wrap">
+        <canvas id="bar-chart" role="img" aria-label="Senaryo Total Time karşılaştırma grafiği">
+          Senaryo karşılaştırma bar grafiği — S1'den S5'e ve mevcut ayara kadar Total Time değerleri
+        </canvas>
+      </div>
+    </div>
+
+    <!-- BOTTLENECK -->
+    <div class="card">
+      <div class="card-title">⚠️ Tahmini Darboğaz Ağırlıkları (mevcut ayar)</div>
+      <div id="bottleneck-list"></div>
+    </div>
+
+    <!-- GA BOX -->
+    <div class="ga-box">
+      <div class="ga-header">
+        <div class="ga-title">🧬 GA Optimumu — Python Genetik Algoritma Referans Çözümü</div>
+        <div class="ga-badge">%53.8 iyileşme</div>
+      </div>
+      <div class="ga-params">
+        <div class="ga-param"><span>KAR_MECH_01</span>1 kaynak</div>
+        <div class="ga-param"><span>ENG_REWORK_01</span>2 kaynak</div>
+        <div class="ga-param"><span>KAR_EMC_01</span>2 kaynak</div>
+        <div class="ga-param"><span>KAR_ENV_01</span>3 kaynak</div>
+        <div class="ga-param"><span>EMC fail</span>%5</div>
+        <div class="ga-param"><span>MECH fail</span>%13</div>
+      </div>
+      <div style="margin-top:10px;font-size:13px;color:#065f46;font-weight:600">
+        Total Time: 8.40 gün (baz: 18.21 gün) — 500 replikasyon, 25 nesil × 30 birey
+      </div>
+    </div>
+
+    <div class="footer">
+      Arena Simülasyonu ile Üretim Test Sürecinin Modellenmesi ve What-If Senaryo Analizi &nbsp;·&nbsp;
+      Bitirme Projesi 2025 &nbsp;·&nbsp;
+      <em>Tarayıcı simülasyonu: Erlang-C kuyruk teorisi + ağırlıklı ölçekleme (≈Arena referansına göre kalibre)</em>
+    </div>
+  </div>
+</div>
+
+<script>
+const BASE = 18.21;
+const S5_REF = 15.30;
+
+function factorial(n) {
+  if (n <= 1) return 1;
+  let r = 1; for (let i = 2; i <= n; i++) r *= i; return r;
+}
+
+function erlangC(a, c) {
+  const rho = a / c;
+  if (rho >= 0.999) return 1;
+  let sum = 0;
+  for (let k = 0; k < c; k++) sum += Math.pow(a, k) / factorial(k);
+  const num = Math.pow(a, c) / (factorial(c) * (1 - rho));
+  const val = num / (sum + num);
+  return isFinite(val) ? val : 1;
+}
+
+function waitTime(arrRate, svcMean, cap) {
+  const mu = 1 / svcMean;
+  const a = arrRate / mu;
+  if (a / cap >= 0.99) return svcMean * 5;
+  const C = erlangC(a, cap);
+  const Wq = C / (cap * mu - arrRate);
+  return isFinite(Wq) && Wq >= 0 ? Wq : 0;
+}
+
+function reworkExtra(failRate, rwMean, maxRw) {
+  let extra = 0, pFail = failRate;
+  for (let i = 0; i < maxRw; i++) { extra += pFail * rwMean; pFail *= failRate; }
+  return extra;
+}
+
+const ARR = 1 / 9.5;
+const PT = { emc:1.7, emcRw:2.6, env:1.4, envRw:2.3, mech:2.1, mechRw:2.5, qual:.55, final:1.15, finalRw:1.85 };
+const MAX_RW = 3;
+
+const BASE_PARAMS = {mechCap:1,engCap:1,emcCap:1,envCap:1,emcFail:.22,mechFail:.25,envFail:.18,finalFail:.14};
+
+function estimateRaw(p) {
+  const {mechCap,engCap,emcCap,envCap,emcFail,mechFail,envFail,finalFail} = p;
+  const va = PT.emc + reworkExtra(emcFail, PT.emcRw, MAX_RW)
+           + PT.env + reworkExtra(envFail, PT.envRw, MAX_RW)
+           + PT.mech + reworkExtra(mechFail, PT.mechRw, MAX_RW)
+           + PT.qual + PT.final + reworkExtra(finalFail, PT.finalRw, MAX_RW);
+
+  const wEmc  = waitTime(ARR, PT.emc,    emcCap);
+  const wEmcR = waitTime(ARR, PT.emcRw,  engCap) * emcFail;
+  const wEnv  = waitTime(ARR, PT.env,    envCap);
+  const wEnvR = waitTime(ARR, PT.envRw,  engCap) * envFail;
+  const wMech = waitTime(ARR, PT.mech,   mechCap);
+  const wMechR= waitTime(ARR, PT.mechRw, engCap) * mechFail;
+  const wFinalR=waitTime(ARR, PT.finalRw,engCap) * finalFail;
+  const wait = wEmc + wEmcR + wEnv + wEnvR + wMech + wMechR + wFinalR;
+
+  return va + wait * 0.38 + 8.2;
+}
+
+const BASE_RAW = estimateRaw(BASE_PARAMS);
+const SCALE = BASE / BASE_RAW;
+
+function estimate(p) {
+  return +(estimateRaw(p) * SCALE).toFixed(2);
+}
+
+function bottleneckWeights(p) {
+  const {mechCap,engCap,emcCap,envCap,emcFail,mechFail,envFail,finalFail} = p;
+  return {
+    'MECH Test':    waitTime(ARR, PT.mech,    mechCap) + reworkExtra(mechFail, PT.mechRw, MAX_RW),
+    'EMC Rework':   waitTime(ARR, PT.emcRw,   engCap)  + reworkExtra(emcFail,  PT.emcRw,  MAX_RW),
+    'ENV Rework':   waitTime(ARR, PT.envRw,   engCap)  + reworkExtra(envFail,  PT.envRw,  MAX_RW),
+    'EMC Test':     waitTime(ARR, PT.emc,     emcCap),
+    'ENV Test':     waitTime(ARR, PT.env,     envCap),
+    'Final Rework': waitTime(ARR, PT.finalRw, engCap)  * finalFail,
+  };
+}
+
+const SCENARIOS = [
+  {name:'S1 Temel',     color:'#64748b', p:{...BASE_PARAMS}},
+  {name:'S2 MECH Kap.', color:'#2563eb', p:{...BASE_PARAMS, mechCap:2}},
+  {name:'S3 ENG Rework',color:'#ea580c', p:{...BASE_PARAMS, engCap:2}},
+  {name:'S4 EMC Fail',  color:'#dc2626', p:{...BASE_PARAMS, emcFail:.10}},
+  {name:'S5 Kombine',   color:'#0d9488', p:{...BASE_PARAMS, mechCap:2, engCap:2, emcFail:.10, mechFail:.20}},
+];
+
+const SCEN_TIMES = SCENARIOS.map(s => estimate(s.p));
+let barChart = null;
+
+function updateChart(labels, values, curVal) {
+  const allData = [...values, curVal];
+  const colors  = [...SCENARIOS.map(s => s.color), '#7c3aed'];
+  const labs    = [...labels, 'Şu an'];
+
+  if (barChart) barChart.destroy();
+  barChart = new Chart(document.getElementById('bar-chart'), {
+    type: 'bar',
+    data: {
+      labels: labs,
+      datasets: [{
+        data: allData,
+        backgroundColor: colors,
+        borderRadius: 6,
+        borderSkipped: false,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: ctx => {
+              const v = ctx.parsed.y;
+              const imp = ((BASE - v) / BASE * 100).toFixed(1);
+              return ` ${v.toFixed(2)} gün  (%${imp} iyileşme)`;
+            }
+          }
+        }
+      },
+      scales: {
+        x: { grid:{display:false}, ticks:{color:'#64748b',font:{size:11}} },
+        y: {
+          min: 0, max: Math.max(...allData) * 1.22,
+          grid: { color:'rgba(0,0,0,0.05)' },
+          ticks: { callback: v => v.toFixed(0)+' gün', color:'#64748b', font:{size:11} }
+        }
+      }
+    }
+  });
+}
+
+function update() {
+  const mechCap   = +document.getElementById('s-mech-cap').value;
+  const engCap    = +document.getElementById('s-eng-cap').value;
+  const emcCap    = +document.getElementById('s-emc-cap').value;
+  const envCap    = +document.getElementById('s-env-cap').value;
+  const emcFail   = +document.getElementById('s-emc-fail').value / 100;
+  const mechFail  = +document.getElementById('s-mech-fail').value / 100;
+  const envFail   = +document.getElementById('s-env-fail').value / 100;
+  const finalFail = +document.getElementById('s-final-fail').value / 100;
+
+  document.getElementById('v-mech-cap').textContent   = mechCap;
+  document.getElementById('v-eng-cap').textContent    = engCap;
+  document.getElementById('v-emc-cap').textContent    = emcCap;
+  document.getElementById('v-env-cap').textContent    = envCap;
+  document.getElementById('v-emc-fail').textContent   = Math.round(emcFail*100)+'%';
+  document.getElementById('v-mech-fail').textContent  = Math.round(mechFail*100)+'%';
+  document.getElementById('v-env-fail').textContent   = Math.round(envFail*100)+'%';
+  document.getElementById('v-final-fail').textContent = Math.round(finalFail*100)+'%';
+
+  const curP   = {mechCap,engCap,emcCap,envCap,emcFail,mechFail,envFail,finalFail};
+  const curT   = estimate(curP);
+  const imp    = +((BASE - curT) / BASE * 100).toFixed(1);
+  const vsS5   = +(curT - S5_REF).toFixed(2);
+
+  document.getElementById('m-cur').textContent   = curT.toFixed(2) + ' gün';
+  document.getElementById('m-imp').textContent   = '%' + imp;
+  document.getElementById('m-imp').className     = 'metric-value ' + (imp > 0 ? 'green' : 'red');
+  document.getElementById('m-imp-sub').textContent = imp > 0 ? 'kazanım ✓' : 'kötüleşme ✗';
+
+  const vs5Sign = vsS5 > 0 ? '+' : '';
+  document.getElementById('m-vs5').textContent   = vs5Sign + vsS5 + ' gün';
+  document.getElementById('m-vs5').className     = 'metric-value ' + (vsS5 <= 0 ? 'green' : 'red');
+  document.getElementById('m-vs5-sub').textContent = vsS5 <= 0 ? 'S5 Kombine\'yi geçtiniz! 🎉' : '15.30 gün referans';
+
+  // Scenario table
+  const bestT   = Math.min(...SCEN_TIMES, curT);
+  const list    = document.getElementById('scenario-list');
+  list.innerHTML = '';
+
+  SCENARIOS.forEach((s, i) => {
+    const t    = SCEN_TIMES[i];
+    const simI = +((BASE - t) / BASE * 100).toFixed(1);
+    const isBest  = Math.abs(t - bestT) < 0.01;
+    const isCur   = Math.abs(t - curT) < 0.15;
+    const row  = document.createElement('div');
+    row.className = 's-row' + (isBest ? ' best-row' : '') + (isCur ? ' active' : '');
+    const badgeCls = simI > 12 ? 'b-teal' : simI > 6 ? 'b-green' : simI > 0 ? 'b-gray' : 'b-red';
+    row.innerHTML = `
+      <div class="s-name">
+        <span style="width:10px;height:10px;border-radius:50%;background:${s.color};display:inline-block;flex-shrink:0"></span>
+        ${s.name}
+        ${isBest ? '<span class="badge b-best">★ en iyi</span>' : ''}
+      </div>
+      <div class="s-time" style="color:${s.color}">${t.toFixed(2)} gün</div>
+      <div class="s-imp"><span class="badge ${badgeCls}">%${simI}${simI > 0 ? ' ↑' : ''}</span></div>
+      <div style="font-size:11px;color:#64748b">${isCur ? '≈ mevcut ayar' : ''}</div>`;
+    list.appendChild(row);
+  });
+
+  // Current row
+  const curRow = document.createElement('div');
+  curRow.className = 'active s-row';
+  curRow.style.borderColor = '#7c3aed';
+  const curBadge = imp > 12 ? 'b-teal' : imp > 6 ? 'b-green' : imp > 0 ? 'b-gray' : 'b-red';
+  curRow.innerHTML = `
+    <div class="s-name">
+      <span style="width:10px;height:10px;border-radius:50%;background:#7c3aed;display:inline-block;flex-shrink:0"></span>
+      Şu an ayar <span class="badge b-blue">siz</span>
+    </div>
+    <div class="s-time" style="color:#7c3aed;font-weight:800">${curT.toFixed(2)} gün</div>
+    <div class="s-imp"><span class="badge ${curBadge}">%${imp}${imp > 0 ? ' ↑' : ''}</span></div>
+    <div style="font-size:11px;color:#64748b">mevcut</div>`;
+  list.appendChild(curRow);
+
+  // Bottleneck
+  const bw = bottleneckWeights(curP);
+  const maxW = Math.max(...Object.values(bw));
+  const bnList = document.getElementById('bottleneck-list');
+  bnList.innerHTML = '';
+  const sorted = Object.entries(bw).sort((a,b) => b[1] - a[1]);
+  sorted.forEach(([name, w]) => {
+    const pct = Math.round(w / maxW * 100);
+    const color = pct > 75 ? '#dc2626' : pct > 40 ? '#ea580c' : '#2563eb';
+    const div = document.createElement('div');
+    div.className = 'bn-row';
+    div.innerHTML = `
+      <div class="bn-label">${name}</div>
+      <div class="bn-track"><div class="bn-fill" style="width:${pct}%;background:${color}"></div></div>
+      <div class="bn-val" style="color:${color}">${w.toFixed(2)}</div>`;
+    bnList.appendChild(div);
+  });
+
+  updateChart(SCENARIOS.map(s => s.name), SCEN_TIMES, curT);
+}
+
+function resetAll() {
+  document.getElementById('s-mech-cap').value   = 1;
+  document.getElementById('s-eng-cap').value    = 1;
+  document.getElementById('s-emc-cap').value    = 1;
+  document.getElementById('s-env-cap').value    = 1;
+  document.getElementById('s-emc-fail').value   = 22;
+  document.getElementById('s-mech-fail').value  = 25;
+  document.getElementById('s-env-fail').value   = 18;
+  document.getElementById('s-final-fail').value = 14;
+  update();
+}
+
+['s-mech-cap','s-eng-cap','s-emc-cap','s-env-cap','s-emc-fail','s-mech-fail','s-env-fail','s-final-fail']
+  .forEach(id => document.getElementById(id).addEventListener('input', update));
+
+update();
+</script>
+</body>
+</html>
