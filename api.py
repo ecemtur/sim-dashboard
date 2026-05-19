@@ -1,642 +1,207 @@
-<!DOCTYPE html>
-<html lang="tr">
-<head>
-<meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>IFE DO-160 Test Simülatörü</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-<style>
-  :root {
-    --bg:       #0d1117;
-    --panel:    #161b22;
-    --border:   #30363d;
-    --accent:   #e05c2a;
-    --accent2:  #58a6ff;
-    --accent3:  #3fb950;
-    --warn:     #f0883e;
-    --danger:   #f85149;
-    --text:     #e6edf3;
-    --muted:    #8b949e;
-    --radius:   8px;
-  }
-  *{box-sizing:border-box;margin:0;padding:0;}
-  body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;font-size:14px;min-height:100vh;}
+import simpy
+import random
+import numpy as np
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from typing import List, Optional
 
-  /* ── Header ── */
-  header{background:var(--panel);border-bottom:1px solid var(--border);padding:14px 24px;display:flex;align-items:center;gap:12px;}
-  header .logo{font-size:20px;font-weight:700;color:var(--accent);}
-  header .subtitle{color:var(--muted);font-size:12px;}
-  .status-dot{width:8px;height:8px;border-radius:50%;background:#f85149;margin-left:auto;transition:.3s;}
-  .status-dot.ok{background:var(--accent3);}
-  #status-text{font-size:11px;color:var(--muted);}
+app = FastAPI(title="IFE DO-160 Test Simulatoru")
 
-  /* ── Layout ── */
-  .layout{display:grid;grid-template-columns:340px 1fr;min-height:calc(100vh - 52px);}
-  .sidebar{border-right:1px solid var(--border);padding:16px;overflow-y:auto;display:flex;flex-direction:column;gap:14px;}
-  .main{padding:20px;overflow-y:auto;display:flex;flex-direction:column;gap:18px;}
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-  /* ── Section card ── */
-  .card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:14px;}
-  .card-title{font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px;display:flex;align-items:center;gap:6px;}
-  .card-title svg{opacity:.7;}
+ENV_TESTS_ALL  = ["Sec.4 Temp/Altitude", "Sec.5 Temp Variation", "Sec.6 Humidity"]
+EMC_TESTS_ALL  = ["Sec.18 CS", "Sec.19 RS", "Sec.20 CS/RS", "Sec.21 CE/RE", "Sec.25 ESD"]
+MECH_TESTS_ALL = ["Sec.7 Shock", "Sec.8 Vibration", "Sec.15 Magnetic", "Sec.16 Power Input", "Sec.17 Voltage Spike"]
 
-  /* ── Slider ── */
-  .param-row{margin-bottom:10px;}
-  .param-label{display:flex;justify-content:space-between;margin-bottom:4px;}
-  .param-label span:first-child{color:var(--text);}
-  .param-val{color:var(--accent);font-weight:700;min-width:30px;text-align:right;}
-  input[type=range]{width:100%;accent-color:var(--accent);height:4px;}
 
-  /* ── Sub-test expander ── */
-  .expander{border:1px solid var(--border);border-radius:6px;overflow:hidden;margin-bottom:8px;}
-  .expander-head{background:#1c2128;padding:8px 12px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;font-size:13px;user-select:none;}
-  .expander-head:hover{background:#21262d;}
-  .expander-head .arrow{transition:.2s;font-size:10px;color:var(--muted);}
-  .expander-head.open .arrow{transform:rotate(180deg);}
-  .expander-body{padding:8px 12px;display:none;background:#0d1117;gap:6px;flex-direction:column;}
-  .expander-body.open{display:flex;}
-  .check-row{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);cursor:pointer;}
-  .check-row input[type=checkbox]{accent-color:var(--accent2);}
-  .check-row:hover{color:var(--text);}
+class SimRequest(BaseModel):
+    replications: int = 30
+    sim_days: float = 120
+    env_capacity: int = 3
+    emc_capacity: int = 4
+    mech_capacity: int = 2
+    rework_capacity: int = 1
+    env_fail_pct: float = 10
+    emc_fail_pct: float = 20
+    mech_fail_pct: float = 10
+    qr_fail_pct: float = 5
+    final_fail_pct: float = 10
+    num_prototypes: int = 3
+    num_equipment: int = 4
+    selected_env: Optional[List[str]] = None
+    selected_emc: Optional[List[str]] = None
+    selected_mech: Optional[List[str]] = None
 
-  /* ── Replication buttons ── */
-  .rep-grid{display:flex;gap:6px;flex-wrap:wrap;}
-  .rep-btn{padding:5px 11px;border-radius:5px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;font-size:12px;transition:.15s;}
-  .rep-btn:hover{border-color:var(--accent);color:var(--accent);}
-  .rep-btn.active{background:var(--accent);color:#fff;border-color:var(--accent);}
 
-  /* ── Run button ── */
-  #btn-run{width:100%;padding:11px;background:var(--accent);color:#fff;border:none;border-radius:var(--radius);font-size:14px;font-weight:600;cursor:pointer;transition:.15s;letter-spacing:.02em;}
-  #btn-run:hover{filter:brightness(1.1);}
-  #btn-run:disabled{opacity:.5;cursor:not-allowed;}
+def tria(low, mode, high):
+    return random.triangular(low, high, mode)
 
-  /* ── KPI strip ── */
-  .kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;}
-  .kpi{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;}
-  .kpi-label{font-size:11px;color:var(--muted);margin-bottom:4px;}
-  .kpi-val{font-size:22px;font-weight:700;color:var(--accent);}
-  .kpi-sub{font-size:11px;color:var(--muted);margin-top:2px;}
 
-  /* ── Results grid ── */
-  .results-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;}
+def run_replication(p):
+    env = simpy.Environment()
 
-  /* ── Table ── */
-  table{width:100%;border-collapse:collapse;font-size:13px;}
-  thead th{text-align:left;padding:8px 10px;color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase;border-bottom:1px solid var(--border);}
-  tbody tr{border-bottom:1px solid var(--border);}
-  tbody tr:hover{background:#1c2128;}
-  tbody td{padding:8px 10px;}
-  .badge{display:inline-block;padding:2px 7px;border-radius:20px;font-size:11px;font-weight:600;}
-  .badge-ok{background:#1a3a2a;color:var(--accent3);}
-  .badge-warn{background:#3a2a10;color:var(--warn);}
-  .badge-danger{background:#3a1a1a;color:var(--danger);}
+    sel_env  = p.selected_env  if p.selected_env  is not None else ENV_TESTS_ALL
+    sel_emc  = p.selected_emc  if p.selected_emc  is not None else EMC_TESTS_ALL
+    sel_mech = p.selected_mech if p.selected_mech is not None else MECH_TESTS_ALL
 
-  /* ── Fail table highlight ── */
-  .fail-pct-bar{height:6px;border-radius:3px;background:var(--accent);margin-top:3px;transition:.5s;}
+    scale_env  = max(len(sel_env)  / len(ENV_TESTS_ALL),  0.1)
+    scale_emc  = max(len(sel_emc)  / len(EMC_TESTS_ALL),  0.1)
+    scale_mech = max(len(sel_mech) / len(MECH_TESTS_ALL), 0.1)
 
-  /* ── Chart container ── */
-  .chart-wrap{position:relative;height:220px;}
+    res_env    = simpy.Resource(env, capacity=p.env_capacity)
+    res_emc    = simpy.Resource(env, capacity=p.emc_capacity)
+    res_mech   = simpy.Resource(env, capacity=p.mech_capacity)
+    res_rework = simpy.Resource(env, capacity=p.rework_capacity)
+    res_qa     = simpy.Resource(env, capacity=1)
+    res_func   = simpy.Resource(env, capacity=1)
 
-  /* ── Spinner ── */
-  .spinner{display:none;width:20px;height:20px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;margin:0 auto;}
-  @keyframes spin{to{transform:rotate(360deg)}}
+    eq_completed      = {i: 0 for i in range(p.num_equipment)}
+    eq_review_started = {i: False for i in range(p.num_equipment)}
+    eq_finish_time    = {}
+    fail_log          = []
 
-  /* ── Utility ── */
-  .hidden{display:none!important;}
-  .section-title{font-size:13px;font-weight:600;color:var(--muted);margin-bottom:10px;display:flex;align-items:center;gap:6px;}
-  .divider{border:none;border-top:1px solid var(--border);margin:4px 0;}
-  .text-danger{color:var(--danger);}
-  .text-warn{color:var(--warn);}
-  .text-ok{color:var(--accent3);}
-  .text-muted{color:var(--muted);}
+    def prototype_proc(eq_id, proto_id):
+        group_idx = proto_id % 3
 
-  @media(max-width:900px){
-    .layout{grid-template-columns:1fr;}
-    .sidebar{border-right:none;border-bottom:1px solid var(--border);}
-    .kpi-grid{grid-template-columns:repeat(2,1fr);}
-    .results-grid{grid-template-columns:1fr;}
-  }
-</style>
-</head>
-<body>
+        if group_idx == 0:
+            for attempt in range(3):
+                with res_env.request() as req:
+                    yield req
+                    yield env.timeout(tria(7, 9.5, 15) * scale_env)
+                if random.random() * 100 >= p.env_fail_pct:
+                    break
+                fail_log.append({"group": "ENV", "eq": eq_id, "proto": proto_id, "time": round(env.now, 2)})
+                if attempt < 2:
+                    with res_rework.request() as req:
+                        yield req
+                        yield env.timeout(tria(5, 10, 20))
+                else:
+                    return
 
-<!-- ═══════════════════════ HEADER ═══════════════════════ -->
-<header>
-  <div>
-    <div class="logo">🔬 IFE DO-160 Test Simülatörü</div>
-    <div class="subtitle">SimPy · FastAPI · Arena-compatible · Bitirme Projesi 2025</div>
-  </div>
-  <div style="display:flex;align-items:center;gap:8px;margin-left:auto;">
-    <div class="status-dot" id="dot"></div>
-    <span id="status-text">Bağlanıyor…</span>
-  </div>
-</header>
+        elif group_idx == 1:
+            for attempt in range(4):
+                with res_emc.request() as req:
+                    yield req
+                    yield env.timeout(tria(6, 9.5, 17) * scale_emc)
+                if random.random() * 100 >= p.emc_fail_pct:
+                    break
+                fail_log.append({"group": "EMC", "eq": eq_id, "proto": proto_id, "time": round(env.now, 2)})
+                if attempt < 3:
+                    with res_rework.request() as req:
+                        yield req
+                        yield env.timeout(tria(5, 15, 30))
+                else:
+                    return
 
-<!-- ═══════════════════════ LAYOUT ═══════════════════════ -->
-<div class="layout">
+        elif group_idx == 2:
+            for attempt in range(3):
+                with res_mech.request() as req:
+                    yield req
+                    yield env.timeout(tria(4, 7.5, 14) * scale_mech)
+                if random.random() * 100 >= p.mech_fail_pct:
+                    break
+                fail_log.append({"group": "MECH", "eq": eq_id, "proto": proto_id, "time": round(env.now, 2)})
+                if attempt < 2:
+                    with res_rework.request() as req:
+                        yield req
+                        yield env.timeout(tria(3, 8, 20))
+                else:
+                    return
 
-  <!-- ─────────────────── SIDEBAR ─────────────────── -->
-  <aside class="sidebar">
+        eq_completed[eq_id] += 1
+        groups_needed = min(p.num_prototypes, 3)
+        if eq_completed[eq_id] >= groups_needed and not eq_review_started[eq_id]:
+            eq_review_started[eq_id] = True
+            env.process(review_proc(eq_id))
 
-    <!-- Ekipman & Prototip -->
-    <div class="card">
-      <div class="card-title">⚙️ Ekipman & Prototip</div>
+    def review_proc(eq_id):
+        while True:
+            with res_qa.request() as req:
+                yield req
+                yield env.timeout(tria(1, 2, 5))
+            if random.random() * 100 >= p.qr_fail_pct:
+                break
+            fail_log.append({"group": "REVIEW", "eq": eq_id, "proto": -1, "time": round(env.now, 2)})
+            with res_rework.request() as req:
+                yield req
+                yield env.timeout(tria(2, 5, 10))
 
-      <div class="param-row">
-        <div class="param-label">
-          <span>Ekipman sayısı (EQ_A → EQ_D)</span>
-          <span class="param-val" id="val-equipment">4</span>
-        </div>
-        <input type="range" id="sl-equipment" min="1" max="4" value="4"
-               oninput="setVal('val-equipment',this.value)">
-      </div>
+        while True:
+            with res_func.request() as req:
+                yield req
+                yield env.timeout(tria(0.5, 1, 2))
+            if random.random() * 100 >= p.final_fail_pct:
+                break
+            fail_log.append({"group": "FINAL", "eq": eq_id, "proto": -1, "time": round(env.now, 2)})
+            with res_rework.request() as req:
+                yield req
+                yield env.timeout(tria(3, 7, 15))
 
-      <div class="param-row">
-        <div class="param-label">
-          <span>Ekipman başına prototip sayısı</span>
-          <span class="param-val" id="val-proto">3</span>
-        </div>
-        <input type="range" id="sl-proto" min="1" max="5" value="3"
-               oninput="setVal('val-proto',this.value)">
-        <div style="font-size:11px;color:var(--muted);margin-top:4px;">
-          P1→ENV · P2→EMC · P3→MECH · P4→ENV · P5→EMC
-        </div>
-      </div>
-    </div>
+        eq_finish_time[eq_id] = round(env.now, 2)
 
-    <!-- Kaynak Kapasiteleri -->
-    <div class="card">
-      <div class="card-title">🏭 Kaynak Kapasiteleri</div>
-      <div class="param-row">
-        <div class="param-label"><span>ENV test merkezi</span><span class="param-val" id="val-env-cap">3</span></div>
-        <input type="range" id="sl-env-cap" min="1" max="8" value="3" oninput="setVal('val-env-cap',this.value)">
-      </div>
-      <div class="param-row">
-        <div class="param-label"><span>EMC test merkezi</span><span class="param-val" id="val-emc-cap">4</span></div>
-        <input type="range" id="sl-emc-cap" min="1" max="8" value="4" oninput="setVal('val-emc-cap',this.value)">
-      </div>
-      <div class="param-row">
-        <div class="param-label"><span>MECH test merkezi</span><span class="param-val" id="val-mech-cap">2</span></div>
-        <input type="range" id="sl-mech-cap" min="1" max="8" value="2" oninput="setVal('val-mech-cap',this.value)">
-      </div>
-      <div class="param-row">
-        <div class="param-label"><span>ENG Rework ekibi</span><span class="param-val" id="val-rework-cap">1</span></div>
-        <input type="range" id="sl-rework-cap" min="1" max="6" value="1" oninput="setVal('val-rework-cap',this.value)">
-      </div>
-    </div>
+    for eq in range(p.num_equipment):
+        for proto in range(p.num_prototypes):
+            env.process(prototype_proc(eq, proto))
 
-    <!-- Hata Oranları -->
-    <div class="card">
-      <div class="card-title">🎲 Hata Oranları</div>
+    env.run(until=p.sim_days)
 
-      <div class="param-row">
-        <div class="param-label"><span>ENV fail %</span><span class="param-val" id="val-env-fail">10</span></div>
-        <input type="range" id="sl-env-fail" min="0" max="50" value="10" oninput="setVal('val-env-fail',this.value)">
-      </div>
-      <!-- ENV sub-tests -->
-      <div class="expander">
-        <div class="expander-head" onclick="toggleExpander(this)">
-          <span>🌡️ Environmental alt testler</span><span class="arrow">▼</span>
-        </div>
-        <div class="expander-body" id="env-tests">
-          <label class="check-row"><input type="checkbox" checked value="Sec.4 Temp/Altitude"> Sec.4 Temperature &amp; Altitude</label>
-          <label class="check-row"><input type="checkbox" checked value="Sec.5 Temp Variation"> Sec.5 Temperature Variation</label>
-          <label class="check-row"><input type="checkbox" checked value="Sec.6 Humidity"> Sec.6 Humidity</label>
-        </div>
-      </div>
+    total_time = max(eq_finish_time.values()) if eq_finish_time else p.sim_days
+    return round(total_time, 2), fail_log
 
-      <div class="param-row">
-        <div class="param-label"><span>EMC fail %</span><span class="param-val" id="val-emc-fail">20</span></div>
-        <input type="range" id="sl-emc-fail" min="0" max="50" value="20" oninput="setVal('val-emc-fail',this.value)">
-      </div>
-      <!-- EMC sub-tests -->
-      <div class="expander">
-        <div class="expander-head" onclick="toggleExpander(this)">
-          <span>📡 EMI/EMC alt testler</span><span class="arrow">▼</span>
-        </div>
-        <div class="expander-body" id="emc-tests">
-          <label class="check-row"><input type="checkbox" checked value="Sec.18 CS"> Sec.18 Conducted Susceptibility</label>
-          <label class="check-row"><input type="checkbox" checked value="Sec.19 RS"> Sec.19 Radiated Susceptibility</label>
-          <label class="check-row"><input type="checkbox" checked value="Sec.20 CS/RS"> Sec.20 CS/RS Intermod</label>
-          <label class="check-row"><input type="checkbox" checked value="Sec.21 CE/RE"> Sec.21 CE/RE Emission</label>
-          <label class="check-row"><input type="checkbox" checked value="Sec.25 ESD"> Sec.25 Electrostatic Discharge</label>
-        </div>
-      </div>
 
-      <div class="param-row">
-        <div class="param-label"><span>MECH fail %</span><span class="param-val" id="val-mech-fail">10</span></div>
-        <input type="range" id="sl-mech-fail" min="0" max="50" value="10" oninput="setVal('val-mech-fail',this.value)">
-      </div>
-      <!-- MECH sub-tests -->
-      <div class="expander">
-        <div class="expander-head" onclick="toggleExpander(this)">
-          <span>⚙️ Mechanical alt testler</span><span class="arrow">▼</span>
-        </div>
-        <div class="expander-body" id="mech-tests">
-          <label class="check-row"><input type="checkbox" checked value="Sec.7 Shock"> Sec.7 Shock</label>
-          <label class="check-row"><input type="checkbox" checked value="Sec.8 Vibration"> Sec.8 Vibration</label>
-          <label class="check-row"><input type="checkbox" checked value="Sec.15 Magnetic"> Sec.15 Magnetic Effect</label>
-          <label class="check-row"><input type="checkbox" checked value="Sec.16 Power Input"> Sec.16 Power Input</label>
-          <label class="check-row"><input type="checkbox" checked value="Sec.17 Voltage Spike"> Sec.17 Voltage Spike</label>
-        </div>
-      </div>
+@app.get("/")
+def root():
+    return {"status": "ok", "info": "IFE DO-160 Test Simulatoru API v2"}
 
-      <div class="param-row">
-        <div class="param-label"><span>Qualification Review fail %</span><span class="param-val" id="val-qr-fail">5</span></div>
-        <input type="range" id="sl-qr-fail" min="0" max="30" value="5" oninput="setVal('val-qr-fail',this.value)">
-      </div>
-      <div class="param-row">
-        <div class="param-label"><span>Final Functional fail %</span><span class="param-val" id="val-final-fail">10</span></div>
-        <input type="range" id="sl-final-fail" min="0" max="30" value="10" oninput="setVal('val-final-fail',this.value)">
-      </div>
-    </div>
 
-    <!-- Simülasyon -->
-    <div class="card">
-      <div class="card-title">🔁 Simülasyon</div>
-      <div class="param-row">
-        <div class="param-label"><span>Replikasyon sayısı</span><span class="param-val" id="val-rep">30</span></div>
-        <input type="range" id="sl-rep" min="10" max="500" step="10" value="30"
-               oninput="setVal('val-rep',this.value)">
-      </div>
-      <div class="rep-grid" style="margin-bottom:10px;">
-        <button class="rep-btn" onclick="setRep(10)">10</button>
-        <button class="rep-btn" onclick="setRep(30)">30</button>
-        <button class="rep-btn" onclick="setRep(100)">100</button>
-        <button class="rep-btn" onclick="setRep(250)">250</button>
-        <button class="rep-btn active" onclick="setRep(500)">500</button>
-      </div>
-      <div class="param-row">
-        <div class="param-label"><span>Simülasyon süresi (gün)</span><span class="param-val" id="val-days">120</span></div>
-        <input type="range" id="sl-days" min="60" max="300" step="10" value="120"
-               oninput="setVal('val-days',this.value)">
-      </div>
-    </div>
+@app.post("/run")
+def run_sim(params: SimRequest):
+    params.replications = max(1, min(params.replications, 500))
 
-    <button id="btn-run" onclick="runSim()">▶ Simülasyonu Çalıştır</button>
-    <button style="width:100%;padding:8px;background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:var(--radius);cursor:pointer;font-size:12px;" onclick="resetDefaults()">↺ Varsayılana Sıfırla</button>
+    times        = []
+    fail_total   = {"ENV": 0, "EMC": 0, "MECH": 0, "REVIEW": 0, "FINAL": 0}
+    fail_per_rep = []
 
-  </aside>
+    for _ in range(params.replications):
+        t, fails = run_replication(params)
+        times.append(t)
+        rep_row = {"ENV": 0, "EMC": 0, "MECH": 0, "REVIEW": 0, "FINAL": 0}
+        for f in fails:
+            g = f["group"]
+            fail_total[g] += 1
+            rep_row[g]    += 1
+        fail_per_rep.append(rep_row)
 
-  <!-- ─────────────────── MAIN ─────────────────── -->
-  <main class="main">
+    times_arr = np.array(times)
+    n = params.replications
 
-    <!-- Spinner -->
-    <div id="spinner" class="spinner hidden"></div>
-    <div id="err-msg" class="hidden" style="color:var(--danger);font-size:13px;padding:8px;background:#1a1010;border:1px solid var(--danger);border-radius:6px;"></div>
+    fail_rep_rates = {}
+    for g in fail_total:
+        count = sum(1 for r in fail_per_rep if r[g] > 0)
+        fail_rep_rates[g] = round(count / n * 100, 1)
 
-    <!-- KPI strip -->
-    <div class="kpi-grid" id="kpi-strip">
-      <div class="kpi">
-        <div class="kpi-label">Ortalama Qualification Süresi</div>
-        <div class="kpi-val" id="kpi-mean">—</div>
-        <div class="kpi-sub">gün (ortalama)</div>
-      </div>
-      <div class="kpi">
-        <div class="kpi-label">Std. Sapma</div>
-        <div class="kpi-val" id="kpi-std" style="color:var(--accent2);">—</div>
-        <div class="kpi-sub">gün</div>
-      </div>
-      <div class="kpi">
-        <div class="kpi-label">Min / Max</div>
-        <div class="kpi-val" id="kpi-range" style="color:var(--accent3);font-size:16px;">—</div>
-        <div class="kpi-sub">gün aralığı</div>
-      </div>
-      <div class="kpi">
-        <div class="kpi-label">Replikasyon</div>
-        <div class="kpi-val" id="kpi-rep" style="color:var(--warn);">—</div>
-        <div class="kpi-sub">çalıştırıldı</div>
-      </div>
-    </div>
+    p5, p25, p50, p75, p95 = np.percentile(times_arr, [5, 25, 50, 75, 95])
 
-    <!-- Results row 1 -->
-    <div class="results-grid">
-
-      <!-- Fail Dağılımı tablosu -->
-      <div class="card">
-        <div class="card-title">❌ Test Grubu Fail Analizi</div>
-        <table id="fail-table">
-          <thead>
-            <tr>
-              <th>Test Grubu</th>
-              <th>Toplam Fail</th>
-              <th>Replikasyon %</th>
-              <th>Durum</th>
-            </tr>
-          </thead>
-          <tbody id="fail-tbody">
-            <tr><td colspan="4" class="text-muted" style="padding:16px;text-align:center;">Simülasyon çalıştırın</td></tr>
-          </tbody>
-        </table>
-      </div>
-
-      <!-- Replikasyon bazlı fail ısı haritası -->
-      <div class="card">
-        <div class="card-title">📊 Replikasyon Bazlı Fail Sayısı</div>
-        <div class="chart-wrap">
-          <canvas id="chart-fail"></canvas>
-        </div>
-      </div>
-    </div>
-
-    <!-- Results row 2 -->
-    <div class="results-grid">
-
-      <!-- Toplam zaman dağılımı -->
-      <div class="card">
-        <div class="card-title">⏱️ Toplam Süre Dağılımı (gün)</div>
-        <div class="chart-wrap">
-          <canvas id="chart-hist"></canvas>
-        </div>
-      </div>
-
-      <!-- Percentile tablosu -->
-      <div class="card">
-        <div class="card-title">📈 İstatistik Özeti</div>
-        <table id="stat-table">
-          <thead>
-            <tr><th>Yüzdelik</th><th>Süre (gün)</th><th>Yorum</th></tr>
-          </thead>
-          <tbody id="stat-tbody">
-            <tr><td colspan="3" class="text-muted" style="padding:16px;text-align:center;">Simülasyon çalıştırın</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-
-    <!-- Fail tekrar çıktısı (ham liste) -->
-    <div class="card" id="fail-detail-card" style="display:none;">
-      <div class="card-title">🔍 Fail Olay Detayı (İlk 50 kayıt)</div>
-      <div style="overflow-x:auto;">
-        <table id="fail-detail-table">
-          <thead>
-            <tr><th>#</th><th>Test Grubu</th><th>Ekipman</th><th>Prototip</th><th>Zaman (gün)</th></tr>
-          </thead>
-          <tbody id="fail-detail-tbody"></tbody>
-        </table>
-      </div>
-    </div>
-
-    <!-- Footer -->
-    <div style="color:var(--muted);font-size:11px;text-align:center;padding-bottom:8px;">
-      Arena Simülasyonu ile Üretim Test Sürecinin Modellenmesi · Bitirme Projesi 2025 · Backend: FastAPI + SimPy · Deploy: Render.com
-    </div>
-
-  </main>
-</div>
-
-<!-- ═══════════════════════ SCRIPTS ═══════════════════════ -->
-<script>
-const API = "https://sim-dashboard-8wfv.onrender.com";
-
-// ── Charts ──
-let chartFail = null;
-let chartHist = null;
-
-// ── Helpers ──
-function setVal(id, v){ document.getElementById(id).textContent = v; }
-
-function setRep(n){
-  document.getElementById('sl-rep').value = n;
-  setVal('val-rep', n);
-  document.querySelectorAll('.rep-btn').forEach(b=>b.classList.remove('active'));
-  event.target.classList.add('active');
-}
-
-function toggleExpander(head){
-  head.classList.toggle('open');
-  const body = head.nextElementSibling;
-  body.classList.toggle('open');
-}
-
-function getChecked(containerId){
-  const boxes = document.querySelectorAll(`#${containerId} input[type=checkbox]`);
-  const checked = [...boxes].filter(b=>b.checked).map(b=>b.value);
-  return checked.length === boxes.length ? null : checked;   // null = all selected
-}
-
-function resetDefaults(){
-  document.getElementById('sl-equipment').value=4; setVal('val-equipment',4);
-  document.getElementById('sl-proto').value=3;     setVal('val-proto',3);
-  document.getElementById('sl-env-cap').value=3;   setVal('val-env-cap',3);
-  document.getElementById('sl-emc-cap').value=4;   setVal('val-emc-cap',4);
-  document.getElementById('sl-mech-cap').value=2;  setVal('val-mech-cap',2);
-  document.getElementById('sl-rework-cap').value=1;setVal('val-rework-cap',1);
-  document.getElementById('sl-env-fail').value=10; setVal('val-env-fail',10);
-  document.getElementById('sl-emc-fail').value=20; setVal('val-emc-fail',20);
-  document.getElementById('sl-mech-fail').value=10;setVal('val-mech-fail',10);
-  document.getElementById('sl-qr-fail').value=5;   setVal('val-qr-fail',5);
-  document.getElementById('sl-final-fail').value=10;setVal('val-final-fail',10);
-  document.getElementById('sl-rep').value=30;      setVal('val-rep',30);
-  document.getElementById('sl-days').value=120;    setVal('val-days',120);
-  document.querySelectorAll('input[type=checkbox]').forEach(b=>b.checked=true);
-}
-
-// ── Status ping ──
-async function ping(){
-  try{
-    const r = await fetch(API+"/");
-    const d = await r.json();
-    document.getElementById('dot').className = 'status-dot ok';
-    document.getElementById('status-text').textContent = 'Backend bağlı';
-  } catch(e){
-    document.getElementById('dot').className = 'status-dot';
-    document.getElementById('status-text').textContent = 'Backend bağlanamıyor';
-  }
-}
-ping();
-
-// ── Run simulation ──
-async function runSim(){
-  const btn = document.getElementById('btn-run');
-  const spinner = document.getElementById('spinner');
-  const errMsg = document.getElementById('err-msg');
-
-  btn.disabled = true;
-  spinner.style.display = 'block';
-  errMsg.classList.add('hidden');
-
-  const payload = {
-    replications:   +document.getElementById('sl-rep').value,
-    sim_days:       +document.getElementById('sl-days').value,
-    env_capacity:   +document.getElementById('sl-env-cap').value,
-    emc_capacity:   +document.getElementById('sl-emc-cap').value,
-    mech_capacity:  +document.getElementById('sl-mech-cap').value,
-    rework_capacity:+document.getElementById('sl-rework-cap').value,
-    env_fail_pct:   +document.getElementById('sl-env-fail').value,
-    emc_fail_pct:   +document.getElementById('sl-emc-fail').value,
-    mech_fail_pct:  +document.getElementById('sl-mech-fail').value,
-    qr_fail_pct:    +document.getElementById('sl-qr-fail').value,
-    final_fail_pct: +document.getElementById('sl-final-fail').value,
-    num_prototypes: +document.getElementById('sl-proto').value,
-    num_equipment:  +document.getElementById('sl-equipment').value,
-    selected_env:   getChecked('env-tests'),
-    selected_emc:   getChecked('emc-tests'),
-    selected_mech:  getChecked('mech-tests'),
-  };
-
-  try{
-    const res = await fetch(API+"/run", {
-      method:"POST",
-      headers:{"Content-Type":"application/json"},
-      body: JSON.stringify(payload)
-    });
-    if(!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    renderResults(data, payload.replications);
-  } catch(e){
-    errMsg.textContent = "⚠️ Hata: " + e.message + " — Render.com servisi uyku modunda olabilir, 30sn bekleyip tekrar deneyin.";
-    errMsg.classList.remove('hidden');
-  } finally{
-    btn.disabled = false;
-    spinner.style.display = 'none';
-  }
-}
-
-// ── Render results ──
-function renderResults(d, reps){
-  // KPI
-  document.getElementById('kpi-mean').textContent = d.mean_time + ' gün';
-  document.getElementById('kpi-std').textContent  = d.std_time  + ' gün';
-  document.getElementById('kpi-range').textContent= d.min_time + ' – ' + d.max_time;
-  document.getElementById('kpi-rep').textContent  = d.replications;
-
-  // Fail table
-  const groups = [
-    {key:'ENV',   label:'Environmental (DO-160)'},
-    {key:'EMC',   label:'EMI/EMC (DO-160)'},
-    {key:'MECH',  label:'Mechanical/Electrical'},
-    {key:'REVIEW',label:'Qualification Review'},
-    {key:'FINAL', label:'Final Functional Test'},
-  ];
-  const tbody = document.getElementById('fail-tbody');
-  tbody.innerHTML = '';
-  groups.forEach(g=>{
-    const count = d.fail_counts[g.key] || 0;
-    const pct   = d.fail_rep_rates[g.key] || 0;
-    const max_bar = 100;
-    let badge = `<span class="badge badge-ok">✓ Düşük</span>`;
-    if(pct >= 40) badge = `<span class="badge badge-danger">✗ Yüksek</span>`;
-    else if(pct >= 15) badge = `<span class="badge badge-warn">⚠ Orta</span>`;
-
-    tbody.innerHTML += `<tr>
-      <td>${g.label}</td>
-      <td>${count}</td>
-      <td>
-        <div>${pct}%</div>
-        <div class="fail-pct-bar" style="width:${Math.min(pct,100)}%"></div>
-      </td>
-      <td>${badge}</td>
-    </tr>`;
-  });
-
-  // Stat table
-  const stbody = document.getElementById('stat-tbody');
-  const rows = [
-    {p:'P5',  v:d.p5,  txt:'Optimistik senaryo'},
-    {p:'P25', v:d.p25, txt:'İyi senaryo'},
-    {p:'P50', v:d.p50, txt:'Medyan (tipik)'},
-    {p:'P75', v:d.p75, txt:'Kötümser senaryo'},
-    {p:'P95', v:d.p95, txt:'En kötü durum'},
-    {p:'Ortalama', v:d.mean_time, txt:'Beklenen süre'},
-  ];
-  stbody.innerHTML = rows.map(r=>`<tr><td>${r.p}</td><td><b>${r.v}</b> gün</td><td class="text-muted">${r.txt}</td></tr>`).join('');
-
-  // Chart: fail per group (bar)
-  const failLabels = groups.map(g=>g.key);
-  const failData   = groups.map(g=>d.fail_rep_rates[g.key]||0);
-  const colors     = ['#e05c2a','#f0883e','#58a6ff','#bc8cff','#f85149'];
-  if(chartFail) chartFail.destroy();
-  chartFail = new Chart(document.getElementById('chart-fail'), {
-    type:'bar',
-    data:{
-      labels: failLabels,
-      datasets:[{
-        label:'Fail içeren replikasyon %',
-        data: failData,
-        backgroundColor: colors,
-        borderRadius: 5,
-      }]
-    },
-    options:{
-      responsive:true, maintainAspectRatio:false,
-      plugins:{legend:{display:false}},
-      scales:{
-        x:{ticks:{color:'#8b949e'},grid:{color:'#21262d'}},
-        y:{ticks:{color:'#8b949e'},grid:{color:'#21262d'},max:100,
-           title:{display:true,text:'% replikasyon',color:'#8b949e'}}
-      }
+    return {
+        "mean_time":      round(float(times_arr.mean()), 2),
+        "std_time":       round(float(times_arr.std()),  2),
+        "min_time":       round(float(times_arr.min()),  2),
+        "max_time":       round(float(times_arr.max()),  2),
+        "p5":             round(float(p5),  2),
+        "p25":            round(float(p25), 2),
+        "p50":            round(float(p50), 2),
+        "p75":            round(float(p75), 2),
+        "p95":            round(float(p95), 2),
+        "replications":   n,
+        "times":          [round(t, 2) for t in times],
+        "fail_counts":    fail_total,
+        "fail_rep_rates": fail_rep_rates,
+        "fail_per_rep":   fail_per_rep,
     }
-  });
-
-  // Chart: histogram of total times
-  const times = d.times || [];
-  const binCount = Math.min(20, Math.ceil(Math.sqrt(times.length)));
-  const mn = Math.min(...times), mx = Math.max(...times);
-  const binW = (mx - mn) / binCount || 1;
-  const bins = Array(binCount).fill(0);
-  const binLabels = [];
-  for(let i=0;i<binCount;i++) binLabels.push(Math.round(mn + i*binW));
-  times.forEach(t=>{
-    let idx = Math.floor((t - mn) / binW);
-    if(idx >= binCount) idx = binCount-1;
-    bins[idx]++;
-  });
-
-  if(chartHist) chartHist.destroy();
-  chartHist = new Chart(document.getElementById('chart-hist'), {
-    type:'bar',
-    data:{
-      labels: binLabels.map(l=>l+' gün'),
-      datasets:[{
-        label:'Replikasyon sayısı',
-        data: bins,
-        backgroundColor:'rgba(88,166,255,0.6)',
-        borderColor:'#58a6ff',
-        borderWidth:1,
-        borderRadius:3,
-      }]
-    },
-    options:{
-      responsive:true, maintainAspectRatio:false,
-      plugins:{legend:{display:false}},
-      scales:{
-        x:{ticks:{color:'#8b949e',maxRotation:45},grid:{color:'#21262d'}},
-        y:{ticks:{color:'#8b949e'},grid:{color:'#21262d'},
-           title:{display:true,text:'Frekans',color:'#8b949e'}}
-      }
-    }
-  });
-
-  // Fail detail table (first 50 from fail_per_rep aggregated)
-  // We show per-rep summary as a compact table
-  const detailCard = document.getElementById('fail-detail-card');
-  const detailTbody = document.getElementById('fail-detail-tbody');
-  detailCard.style.display = 'block';
-  detailTbody.innerHTML = '';
-
-  // Show reps that had any fail
-  const failReps = (d.fail_per_rep || [])
-    .map((row,i)=>({rep:i+1,...row, total: Object.values(row).reduce((a,b)=>a+b,0)}))
-    .filter(r=>r.total > 0)
-    .slice(0,50);
-
-  if(failReps.length === 0){
-    detailTbody.innerHTML = `<tr><td colspan="5" class="text-ok" style="padding:12px;text-align:center;">✓ Hiç fail kaydı yok</td></tr>`;
-  } else {
-    failReps.forEach(r=>{
-      const failList = ['ENV','EMC','MECH','REVIEW','FINAL']
-        .filter(g=>r[g]>0)
-        .map(g=>`<span class="badge badge-danger">${g}×${r[g]}</span>`)
-        .join(' ');
-      detailTbody.innerHTML += `<tr>
-        <td>${r.rep}</td>
-        <td colspan="3">${failList}</td>
-        <td>${r.total} toplam fail</td>
-      </tr>`;
-    });
-  }
-}
-</script>
-</body>
-</html>
