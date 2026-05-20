@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
 
-app = FastAPI(title="IFE DO-160 Test Simulatoru")
+app = FastAPI(title="DO-160 Test Simulatoru")
 
 app.add_middleware(
     CORSMiddleware,
